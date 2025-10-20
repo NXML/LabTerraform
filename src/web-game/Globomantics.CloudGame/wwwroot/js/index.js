@@ -1,16 +1,17 @@
 const img = [
-  'https://octodex.github.com/images/steroidtocat.png',
-  'https://octodex.github.com/images/megacat-2.png',
-  'https://octodex.github.com/images/dodgetocat_v2.png',
-  'https://octodex.github.com/images/mcefeeline.jpg',
-  'https://octodex.github.com/images/ironcat.jpg',
-  'https://octodex.github.com/images/gracehoppertocat.jpg',
-  'https://octodex.github.com/images/spidertocat.png',
-  'https://octodex.github.com/images/octocat-de-los-muertos.jpg',
-  'https://octodex.github.com/images/saritocat.png',
-  'https://octodex.github.com/images/plumber.jpg',
-  'https://octodex.github.com/images/linktocat.jpg',
-  'https://octodex.github.com/images/kimonotocat.png'	
+  // 12 coding language logos (SVGs from Simple Icons via jsDelivr)
+  'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/javascript.svg',
+  'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/typescript.svg',
+  'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/python.svg',
+  'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/java.svg',
+  'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/csharp.svg',
+  'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/go.svg',
+  'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/ruby.svg',
+  'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/php.svg',
+  'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/rust.svg',
+  'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/kotlin.svg',
+  'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/swift.svg',
+  'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/cplusplus.svg'
 ];
 
 let total = 0;
