@@ -1,11 +1,17 @@
 name: Build and publish Docker image
 
 # Trigger this workflow after the CodeQL workflow completes successfully
+# and also trigger a build when a semver tag is pushed (e.g. 1.0.1 or v1.0.1)
 on:
   workflow_run:
     workflows: ["CodeQL"]
     types:
       - completed
+  push:
+    # Catch semver-style tags like 1.0.0 and tags prefixed with v (v1.0.0)
+    tags:
+      - 'v*'
+      - '*.*.*'
 
 permissions:
   contents: read
@@ -14,9 +20,9 @@ permissions:
 
 jobs:
   build-and-push:
+    # run for tag pushes or when CodeQL workflow succeeded; branch filtering happens in the script
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
     runs-on: ubuntu-latest
-    # only run when the triggering workflow concluded successfully and for allowed branches
-    if: ${{ github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'recette') }}
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -38,17 +44,39 @@ jobs:
     - name: Extract version and tag variables
       id: vars
       run: |
-        # compute short commit sha
+        # compute short commit sha (useful for non-tag builds)
         COMMIT_SHA=$(git rev-parse --short HEAD)
-        # branch name from the workflow_run head branch (workflow_run trigger ensures it's present)
-        BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
         # Docker repository names must be lowercase - ensure owner is lowercased
         OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
         IMAGE_NAME="ghcr.io/${OWNER_LOWER}/globomantics-cloudgame"
-        TAG="${BRANCH_NAME}-${COMMIT_SHA}"
-        echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_OUTPUT
-        echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_OUTPUT
-        echo "TAG=$TAG" >> $GITHUB_OUTPUT
+
+        # If this run was triggered by a tag push, publish the image using the tag name (strip leading 'v' if present)
+        if [ "${GITHUB_EVENT_NAME}" = "push" ] && [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+          RELEASE_TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${RELEASE_TAG#v}
+          # set outputs: use VERSION as COMMIT_SHA for downstream tag usage
+          echo "COMMIT_SHA=$VERSION" >> $GITHUB_OUTPUT
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          # pass tags as a multi-line output in TAGS
+          echo "TAGS<<EOF" >> $GITHUB_OUTPUT
+          echo "${IMAGE_NAME}:${VERSION}" >> $GITHUB_OUTPUT
+          echo "${IMAGE_NAME}:latest" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        else
+          # default behavior for branch builds triggered by workflow_run: determine branch and ensure it's allowed
+          BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
+          # Only proceed for allowed branches
+          if [ "${BRANCH_NAME}" != "develop" ] && [ "${BRANCH_NAME}" != "main" ] && [ "${BRANCH_NAME}" != "recette" ]; then
+            echo "Branch ${BRANCH_NAME} is not allowed for image publish - exiting"
+            exit 78
+          fi
+          echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "TAGS<<EOF" >> $GITHUB_OUTPUT
+          echo "${IMAGE_NAME}:latest" >> $GITHUB_OUTPUT
+          echo "${IMAGE_NAME}:${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        fi
 
     # (branch filtering handled by the job-level if)
 
