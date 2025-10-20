@@ -37,7 +37,9 @@ jobs:
         COMMIT_SHA=$(git rev-parse --short HEAD)
         # branch name from ref (refs/heads/<branch>)
         BRANCH_NAME=${GITHUB_REF#refs/heads/}
-        IMAGE_NAME="ghcr.io/${GITHUB_REPOSITORY_OWNER}/globomantics-cloudgame"
+        # Docker repository names must be lowercase - ensure owner is lowercased
+        OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+        IMAGE_NAME="ghcr.io/${OWNER_LOWER}/globomantics-cloudgame"
         TAG="${BRANCH_NAME}-${COMMIT_SHA}"
         echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_OUTPUT
         echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_OUTPUT
