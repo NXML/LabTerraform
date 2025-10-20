@@ -1,0 +1,109 @@
+name: Build and publish Docker image
+
+# Trigger this workflow after the CodeQL workflow completes successfully
+# and also trigger a build when a semver tag is pushed (e.g. 1.0.1 or v1.0.1)
+on:
+  workflow_run:
+    workflows: ["CodeQL"]
+    types:
+      - completed
+  push:
+    # Catch semver-style tags like 1.0.0 and tags prefixed with v (v1.0.0)
+    branches:
+      - develop
+      - master
+      - recette
+    tags:
+      - 'v*'
+      - '*.*.*'
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  build-and-push:
+    # run for tag pushes or when CodeQL workflow succeeded; branch filtering happens in the script
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        # Uses the automatically provided GITHUB_TOKEN to authenticate
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract version and tag variables
+      id: vars
+      run: |
+        # compute short commit sha (useful for non-tag builds)
+        COMMIT_SHA=$(git rev-parse --short HEAD)
+        # Docker repository names must be lowercase - ensure owner is lowercased
+        OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+        IMAGE_NAME="ghcr.io/${OWNER_LOWER}/globomantics-cloudgame"
+
+        # Handle tag pushes (release) -> publish versioned images
+        if [ "${GITHUB_EVENT_NAME}" = "push" ] && [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+          RELEASE_TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${RELEASE_TAG#v}
+          echo "COMMIT_SHA=$VERSION" >> $GITHUB_OUTPUT
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "TAGS<<EOF" >> $GITHUB_OUTPUT
+          echo "${IMAGE_NAME}:${VERSION}" >> $GITHUB_OUTPUT
+          echo "${IMAGE_NAME}:latest" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+        # Handle branch pushes (develop/master) -> publish with short SHA
+        elif [ "${GITHUB_EVENT_NAME}" = "push" ] && [[ "${GITHUB_REF}" == refs/heads/* ]]; then
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          # Only allow develop and master for direct pushes
+          if [ "${BRANCH_NAME}" != "develop" ] && [ "${BRANCH_NAME}" != "master" ]; then
+            echo "Push on branch ${BRANCH_NAME} not allowed for image publish - exiting"
+            exit 78
+          fi
+          echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "TAGS<<EOF" >> $GITHUB_OUTPUT
+          echo "${IMAGE_NAME}:latest" >> $GITHUB_OUTPUT
+          echo "${IMAGE_NAME}:${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+        else
+          # default behavior for branch builds triggered by workflow_run: determine branch and ensure it's allowed
+          BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
+          # Allow develop, main, master and recette when coming from workflow_run
+          if [ "${BRANCH_NAME}" != "develop" ] && [ "${BRANCH_NAME}" != "main" ] && [ "${BRANCH_NAME}" != "master" ] && [ "${BRANCH_NAME}" != "recette" ]; then
+            echo "Branch ${BRANCH_NAME} is not allowed for image publish - exiting"
+            exit 78
+          fi
+          echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "TAGS<<EOF" >> $GITHUB_OUTPUT
+          echo "${IMAGE_NAME}:latest" >> $GITHUB_OUTPUT
+          echo "${IMAGE_NAME}:${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        fi
+
+    # (branch filtering handled by the job-level if)
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./src/web-game/Globomantics.CloudGame
+        file: ./src/web-game/Globomantics.CloudGame/Dockerfile
+        push: true
+        tags: ${{ steps.vars.outputs.TAGS }}

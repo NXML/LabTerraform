@@ -56,9 +56,10 @@ body {
 }
 .room .card .front {
 	position: absolute;
-	background: url(https://s3-us-west-2.amazonaws.com/s.cdpn.io/t-1/profile/profile-512.jpg);
+	/* neutral gradient as card front background */
+	background: linear-gradient(135deg, #ececec 0%, #dcdcdc 100%);
 	background-repeat: no-repeat;
-	background-size: 100%;
+	background-size: cover;
 	z-index: 1;
 }
 .room .card .back {
