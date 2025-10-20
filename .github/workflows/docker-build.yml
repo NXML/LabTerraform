@@ -9,6 +9,10 @@ on:
       - completed
   push:
     # Catch semver-style tags like 1.0.0 and tags prefixed with v (v1.0.0)
+    branches:
+      - develop
+      - master
+      - recette
     tags:
       - 'v*'
       - '*.*.*'
@@ -26,6 +30,8 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v2
@@ -50,23 +56,37 @@ jobs:
         OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
         IMAGE_NAME="ghcr.io/${OWNER_LOWER}/globomantics-cloudgame"
 
-        # If this run was triggered by a tag push, publish the image using the tag name (strip leading 'v' if present)
+        # Handle tag pushes (release) -> publish versioned images
         if [ "${GITHUB_EVENT_NAME}" = "push" ] && [[ "${GITHUB_REF}" == refs/tags/* ]]; then
           RELEASE_TAG=${GITHUB_REF#refs/tags/}
           VERSION=${RELEASE_TAG#v}
-          # set outputs: use VERSION as COMMIT_SHA for downstream tag usage
           echo "COMMIT_SHA=$VERSION" >> $GITHUB_OUTPUT
           echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_OUTPUT
-          # pass tags as a multi-line output in TAGS
           echo "TAGS<<EOF" >> $GITHUB_OUTPUT
           echo "${IMAGE_NAME}:${VERSION}" >> $GITHUB_OUTPUT
           echo "${IMAGE_NAME}:latest" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+
+        # Handle branch pushes (develop/master) -> publish with short SHA
+        elif [ "${GITHUB_EVENT_NAME}" = "push" ] && [[ "${GITHUB_REF}" == refs/heads/* ]]; then
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          # Only allow develop and master for direct pushes
+          if [ "${BRANCH_NAME}" != "develop" ] && [ "${BRANCH_NAME}" != "master" ]; then
+            echo "Push on branch ${BRANCH_NAME} not allowed for image publish - exiting"
+            exit 78
+          fi
+          echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "TAGS<<EOF" >> $GITHUB_OUTPUT
+          echo "${IMAGE_NAME}:latest" >> $GITHUB_OUTPUT
+          echo "${IMAGE_NAME}:${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
         else
           # default behavior for branch builds triggered by workflow_run: determine branch and ensure it's allowed
           BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
-          # Only proceed for allowed branches
-          if [ "${BRANCH_NAME}" != "develop" ] && [ "${BRANCH_NAME}" != "main" ] && [ "${BRANCH_NAME}" != "recette" ]; then
+          # Allow develop, main, master and recette when coming from workflow_run
+          if [ "${BRANCH_NAME}" != "develop" ] && [ "${BRANCH_NAME}" != "main" ] && [ "${BRANCH_NAME}" != "master" ] && [ "${BRANCH_NAME}" != "recette" ]; then
             echo "Branch ${BRANCH_NAME} is not allowed for image publish - exiting"
             exit 78
           fi
@@ -86,6 +106,4 @@ jobs:
         context: ./src/web-game/Globomantics.CloudGame
         file: ./src/web-game/Globomantics.CloudGame/Dockerfile
         push: true
-        tags: |
-          ${{ steps.vars.outputs.IMAGE_NAME }}:latest
-          ${{ steps.vars.outputs.IMAGE_NAME }}:${{ steps.vars.outputs.COMMIT_SHA }}
+        tags: ${{ steps.vars.outputs.TAGS }}
