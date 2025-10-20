@@ -1,8 +1,11 @@
 name: Build and publish Docker image
 
+# Trigger this workflow after the CodeQL workflow completes successfully
 on:
-  push:
-    branches: [ develop, main, recette ]
+  workflow_run:
+    workflows: ["CodeQL"]
+    types:
+      - completed
 
 permissions:
   contents: read
@@ -12,6 +15,8 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    # only run when the triggering workflow concluded successfully and for allowed branches
+    if: ${{ github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'recette') }}
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -35,8 +40,8 @@ jobs:
       run: |
         # compute short commit sha
         COMMIT_SHA=$(git rev-parse --short HEAD)
-        # branch name from ref (refs/heads/<branch>)
-        BRANCH_NAME=${GITHUB_REF#refs/heads/}
+        # branch name from the workflow_run head branch (workflow_run trigger ensures it's present)
+        BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
         # Docker repository names must be lowercase - ensure owner is lowercased
         OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
         IMAGE_NAME="ghcr.io/${OWNER_LOWER}/globomantics-cloudgame"
@@ -44,6 +49,8 @@ jobs:
         echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_OUTPUT
         echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_OUTPUT
         echo "TAG=$TAG" >> $GITHUB_OUTPUT
+
+    # (branch filtering handled by the job-level if)
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v4
