@@ -1,0 +1,54 @@
+name: Build and publish Docker image
+
+on:
+  push:
+    branches: [ develop, main, recette ]
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        # Uses the automatically provided GITHUB_TOKEN to authenticate
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract version and tag variables
+      id: vars
+      run: |
+        # compute short commit sha
+        COMMIT_SHA=$(git rev-parse --short HEAD)
+        # branch name from ref (refs/heads/<branch>)
+        BRANCH_NAME=${GITHUB_REF#refs/heads/}
+        IMAGE_NAME="ghcr.io/${GITHUB_REPOSITORY_OWNER}/globomantics-cloudgame"
+        TAG="${BRANCH_NAME}-${COMMIT_SHA}"
+        echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_OUTPUT
+        echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_OUTPUT
+        echo "TAG=$TAG" >> $GITHUB_OUTPUT
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./src/web-game/Globomantics.CloudGame
+        file: ./src/web-game/Globomantics.CloudGame/Dockerfile
+        push: true
+        tags: |
+          ${{ steps.vars.outputs.IMAGE_NAME }}:latest
+          ${{ steps.vars.outputs.IMAGE_NAME }}:${{ steps.vars.outputs.COMMIT_SHA }}
